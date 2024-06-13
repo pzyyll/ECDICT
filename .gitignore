@@ -1,1 +1,10 @@
 __pycache__
+.conda
+.venv
+
+*.pyc
+*.pyo
+*.pyd
+*.prof
+
+**/.DS_Store

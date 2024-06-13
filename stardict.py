@@ -738,62 +738,48 @@ class DictCsv (object):
         return x
 
     # 读取文件
-    def __read (self):
+    def __read(self):
+        """Update and remove python2 support."""
         self.reset()
-        filename = self.__csvname
-        if filename is None:
+        try:
+            with open(self.__csvname, mode='r', encoding=self.__codec) as file:
+                reader = csv.reader(file)
+                next(reader, None)  # 跳过标题行
+
+                rows = []
+                words = set()
+                for row in reader:
+                    if not row:
+                        continue
+                    
+                    # 确保每行都有固定的列数
+                    adjusted_row = row[:COLUMN_SIZE] + [None] * (COLUMN_SIZE - len(row))
+                    
+                    # 获取并处理单词
+                    word = adjusted_row[0].lower()
+                    if word in words:
+                        continue
+                    words.add(word)
+
+                    # 添加额外的数据
+                    adjusted_row.extend([0, 0, stripword(adjusted_row[0])])
+                    rows.append(adjusted_row)
+
+                # 更新索引和单词集
+                self.__rows = sorted(rows, key=lambda r: r[0].lower())
+                for index, row in enumerate(self.__rows):
+                    row[COLUMN_ID] = index
+                    self.__words[row[0].lower()] = row
+
+                self.__index = sorted(self.__rows, key=lambda r: (r[COLUMN_SW], r[0].lower()))
+                for index, row in enumerate(self.__index):
+                    row[COLUMN_SD] = index
+
+                return True
+        except Exception as e:
+            print(f"Failed to read file {self.__csvname} with error: {e}")
             return False
-        if not os.path.exists(self.__csvname):
-            return False
-        codec = self.__codec
-        if sys.version_info[0] < 3:
-            fp = open(filename, 'rb')
-            content = fp.read()
-            if not isinstance(content, type(b'')):
-                content = content.encode(codec, 'ignore')
-            content = content.replace(b'\r\n', b'\n')
-            bio = io.BytesIO()
-            bio.write(content)
-            bio.seek(0)
-            reader = csv.reader(bio)
-        else:
-            reader = csv.reader(open(filename, encoding = codec))
-        rows = []
-        index = []
-        words = {}
-        count = 0
-        for row in reader:
-            count += 1
-            if count == 1:
-                continue
-            if len(row) < 1:
-                continue
-            if sys.version_info[0] < 3:
-                row = [ n.decode(codec, 'ignore') for n in row ]
-            if len(row) < COLUMN_SIZE:
-                row.extend([None] * (COLUMN_SIZE - len(row)))
-            if len(row) > COLUMN_SIZE:
-                row = row[:COLUMN_SIZE]
-            word = row[0].lower()
-            if word in words:
-                continue
-            row.extend([0, 0, stripword(row[0])])
-            words[word] = 1
-            rows.append(row)
-            index.append(row)
-        self.__rows = rows
-        self.__index = index
-        self.__rows.sort(key = lambda row: row[0].lower())
-        self.__index.sort(key = lambda row: (row[COLUMN_SW], row[0].lower()))
-        for index in xrange(len(self.__rows)):
-            row = self.__rows[index]
-            row[COLUMN_ID] = index
-            word = row[0].lower()
-            self.__words[word] = row
-        for index in xrange(len(self.__index)):
-            row = self.__index[index]
-            row[COLUMN_SD] = index
-        return True
+
 
     # 保存文件
     def save (self, filename = None, codec = 'utf-8'):
@@ -946,10 +932,7 @@ class DictCsv (object):
 
     # 迭代器
     def __iter__ (self):
-        record = []
-        for index in xrange(len(self.__rows)):
-            record.append((index, self.__rows[index][0]))
-        return record.__iter__()
+        return ((index, row[0]) for index, row in enumerate(self.__rows))
 
     # 注册新单词
     def register (self, word, items, commit = True):
